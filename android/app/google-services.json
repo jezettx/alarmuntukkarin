@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "762025541120",
+    "project_id": "remote-alarm-4dc0e",
+    "storage_bucket": "remote-alarm-4dc0e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:762025541120:android:00beeacefc0d071d6622e5",
+        "android_client_info": {
+          "package_name": "com.childe.alarm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCYzSzFpOOAtJKq8MB_B7vwJgYySLsBelY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

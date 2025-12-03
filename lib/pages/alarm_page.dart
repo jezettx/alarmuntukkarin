@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:alarm/services/pair_remote_service.dart';
+import 'package:alarm/services/alarm_service.dart';
 
 class AlarmPage extends StatefulWidget {
-  final String pairId; // <- pakai huruf kecil d
+  final String pairId;
 
   const AlarmPage({
     super.key,
@@ -28,7 +29,7 @@ class _AlarmPageState extends State<AlarmPage> {
     super.initState();
 
     _remote = PairRemoteService(
-      pairId: widget.pairId, // <- pakai widget.pairId
+      pairId: widget.pairId,
     );
 
     _remote.listen(
@@ -46,41 +47,13 @@ class _AlarmPageState extends State<AlarmPage> {
   }
 
   void _handleRing() {
-    print('DEBUG >>> _handleRing() DIPANGGIL');
-    _playAlarm();
+    print('🔔 RING command received from partner');
+    AlarmService.instance.playAlarm(partnerName: 'Karin');
   }
 
   void _handleStop() {
-    print('DEBUG >>> _handleStop() DIPANGGIL');
-    _stopAlarm();
-  }
-
-  String _getRingtoneAsset() {
-    switch (_currentRingtone) {
-      case 'ringtone_1':
-        return 'ringtones/ringtone_1.mp3';
-      case 'ringtone_2':
-        return 'ringtones/ringtone_2.mp3';
-      default:
-        return 'ringtones/ringtone_1.mp3';
-    }
-  }
-
-  Future<void> _playAlarm() async {
-    print('DEBUG >>> _playAlarm() DIPANGGIL (dari Firestore / lokal)');
-
-    await _player.stop();
-    await _player.setReleaseMode(ReleaseMode.loop);
-
-    final assetPath = _getRingtoneAsset();
-    print('DEBUG >>> mainkan asset: $assetPath');
-
-    await _player.play(AssetSource(assetPath));
-  }
-
-  Future<void> _stopAlarm() async {
-    print('DEBUG >>> _stopAlarm() DIPANGGIL (dari Firestore / lokal)');
-    await _player.stop();
+    print('🛑 STOP command received from partner');
+    AlarmService.instance.stopAlarm(method: 'remote_command');
   }
 
   @override
@@ -108,16 +81,7 @@ class _AlarmPageState extends State<AlarmPage> {
 
             ElevatedButton(
               onPressed: () {
-                print('DEBUG >>> TOMBOL SET RINGTONE DIKLIK');
-                _remote.setRingtone('ringtone_1');
-              },
-              child: const Text('Set Ringtone ke "ringtone_1"'),
-            ),
-            const SizedBox(height: 8),
-
-            ElevatedButton(
-              onPressed: () {
-                print('DEBUG >>> TOMBOL RING DIKLIK');
+                print('🔔 Kirim RING command');
                 _remote.setRing();
               },
               child: const Text('Kirim RING ke pasangan'),
@@ -126,7 +90,7 @@ class _AlarmPageState extends State<AlarmPage> {
 
             ElevatedButton(
               onPressed: () {
-                print('DEBUG >>> TOMBOL STOP DIKLIK');
+                print('🛑 Kirim STOP command');
                 _remote.setStop();
               },
               child: const Text('Kirim STOP ke pasangan'),
@@ -134,8 +98,17 @@ class _AlarmPageState extends State<AlarmPage> {
             const SizedBox(height: 8),
 
             ElevatedButton(
+              onPressed: () {
+                print('🎵 Set ringtone');
+                _remote.setRingtone('ringtone_1');
+              },
+              child: const Text('Set Ringtone ke "ringtone_1"'),
+            ),
+            const SizedBox(height: 8),
+
+            ElevatedButton(
               onPressed: () async {
-                print('DEBUG >>> TOMBOL TES LOCAL AUDIO');
+                print('🧪 Test local audio playback');
                 await _player.stop();
                 await _player.setReleaseMode(ReleaseMode.loop);
                 await _player.play(AssetSource('ringtones/ringtone_1.mp3'));

@@ -2,10 +2,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import '../services/file_alarm_service.dart';
+import '../services/alarm_service.dart';
 import '../services/pair_remote_service.dart';
 import 'package:alarm/config/app_config.dart';
-
 
 class PartnerRingtonePage extends StatefulWidget {
   const PartnerRingtonePage({super.key});
@@ -15,21 +14,18 @@ class PartnerRingtonePage extends StatefulWidget {
 }
 
 class _PartnerRingtonePageState extends State<PartnerRingtonePage> {
-  late final FileAlarmService _fileAlarmService;
   late final PairRemoteService _pairService;
-
   String? _ringtoneName;
 
   @override
   void initState() {
     super.initState();
-    _fileAlarmService = FileAlarmService();
     _pairService = PairRemoteService(pairId: AppConfig.pairId);
   }
 
   @override
   void dispose() {
-    _fileAlarmService.dispose();
+    _pairService.dispose();
     super.dispose();
   }
 
@@ -39,7 +35,7 @@ class _PartnerRingtonePageState extends State<PartnerRingtonePage> {
     );
 
     if (result == null || result.files.isEmpty) {
-      print("DEBUG >>> user batal pilih file");
+      print("🔇 User cancelled file picker");
       return;
     }
 
@@ -47,15 +43,17 @@ class _PartnerRingtonePageState extends State<PartnerRingtonePage> {
     final path = file.path;
 
     if (path == null) {
-      print("DEBUG >>> path null");
+      print("❌ File path is null");
       return;
     }
 
-    _fileAlarmService.setFilePath(path);
+    AlarmService.instance.setCustomRingtone(path);
 
     setState(() {
       _ringtoneName = file.name;
     });
+
+    print("✅ Ringtone selected: ${file.name}");
   }
 
   @override
@@ -85,22 +83,22 @@ class _PartnerRingtonePageState extends State<PartnerRingtonePage> {
 
             ElevatedButton(
               onPressed: () async {
-                print("DEBUG >>> Bunyikan ditekan (remote + lokal)");
+                print("🔔 Bunyikan alarm (remote + lokal)");
                 await _pairService.setRing();
-                await _fileAlarmService.playAlarm();
+                AlarmService.instance.playAlarm(partnerName: 'You');
               },
-              child: const Text('Bunyikan'),
+              child: const Text('🔔 Bunyikan Alarm'),
             ),
 
             const SizedBox(height: 8),
 
             ElevatedButton(
               onPressed: () async {
-                print("DEBUG >>> Matikan ditekan (remote + lokal)");
+                print("🛑 Matikan alarm (remote + lokal)");
                 await _pairService.setStop();
-                await _fileAlarmService.stopAlarm();
+                AlarmService.instance.stopAlarm(method: 'manual_button');
               },
-              child: const Text('Matikan'),
+              child: const Text('🛑 Matikan Alarm'),
             ),
           ],
         ),
