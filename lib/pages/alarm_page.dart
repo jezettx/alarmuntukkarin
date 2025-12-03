@@ -1,9 +1,7 @@
 // ignore_for_file: avoid_print
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:audioplayers/audioplayers.dart';
-import 'package:alarm/services/pair_remote_service.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:alarm/services/alarm_service.dart';
 
 class AlarmPage extends StatefulWidget {
@@ -19,103 +17,182 @@ class AlarmPage extends StatefulWidget {
 }
 
 class _AlarmPageState extends State<AlarmPage> {
-  late final PairRemoteService _remote;
-  final AudioPlayer _player = AudioPlayer();
+  String? _selectedRingtonePath;
+  String? _selectedRingtoneName;
 
-  String _currentRingtone = 'default';
-
-  @override
-  void initState() {
-    super.initState();
-
-    _remote = PairRemoteService(
-      pairId: widget.pairId,
+  // Button 3: Pilih Nada Dering
+  Future<void> _pickRingtone() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.audio,
     );
 
-    _remote.listen(
-      onRing: _handleRing,
-      onStop: _handleStop,
-      onRingtoneChange: (ringtone) {
-        setState(() {
-          _currentRingtone = ringtone;
-        });
-        if (kDebugMode) {
-          print('Ringtone diganti jadi: $_currentRingtone');
-        }
-      },
+    if (result == null || result.files.isEmpty) {
+      print("🔇 User cancelled file picker");
+      return;
+    }
+
+    final file = result.files.single;
+    final path = file.path;
+
+    if (path == null) {
+      print("❌ File path is null");
+      return;
+    }
+
+    setState(() {
+      _selectedRingtonePath = path;
+      _selectedRingtoneName = file.name;
+    });
+
+    print("✅ Ringtone selected: ${file.name}");
+  }
+
+  // Button 4: Set Nada Dering
+  void _setRingtone() {
+    if (_selectedRingtonePath == null) {
+      print("⚠️ Belum pilih nada dering!");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pilih nada dering dulu!')),
+      );
+      return;
+    }
+
+    // Set ke AlarmService
+    AlarmService.instance.setCustomRingtone(_selectedRingtonePath);
+    
+    print("✅ Nada dering di-set: $_selectedRingtoneName");
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Nada dering di-set: $_selectedRingtoneName')),
     );
-  }
-
-  void _handleRing() {
-    print('🔔 RING command received from partner');
-    AlarmService.instance.playAlarm(partnerName: 'Karin');
-  }
-
-  void _handleStop() {
-    print('🛑 STOP command received from partner');
-    AlarmService.instance.stopAlarm(method: 'remote_command');
-  }
-
-  @override
-  void dispose() {
-    _remote.dispose();
-    _player.dispose();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Alarm Receiver'),
+        title: const Text('Gentle Wake-Up'),
+        centerTitle: true,
+        backgroundColor: Colors.deepPurple,
+        foregroundColor: Colors.white,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('PairID: ${widget.pairId}'),
-            const SizedBox(height: 8),
-            Text('Ringtone sekarang: $_currentRingtone'),
-            const SizedBox(height: 16),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Status Card
+              Card(
+                elevation: 4,
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.music_note, size: 48, color: Colors.deepPurple),
+                      const SizedBox(height: 12),
+                      Text(
+                        _selectedRingtoneName ?? 'Belum ada nada dering dipilih',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
+              const SizedBox(height: 40),
 
-            ElevatedButton(
-              onPressed: () {
-                print('🔔 Kirim RING command');
-                _remote.setRing();
-              },
-              child: const Text('Kirim RING ke pasangan'),
-            ),
-            const SizedBox(height: 8),
+              // Button 1: Play Alarm
+              ElevatedButton.icon(
+                onPressed: () {
+                  print('🔔 Play alarm');
+                  AlarmService.instance.playAlarm(partnerName: 'Test');
+                },
+                icon: const Icon(Icons.alarm, size: 28),
+                label: const Text(
+                  'Play Alarm',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
 
-            ElevatedButton(
-              onPressed: () {
-                print('🛑 Kirim STOP command');
-                _remote.setStop();
-              },
-              child: const Text('Kirim STOP ke pasangan'),
-            ),
-            const SizedBox(height: 8),
+              const SizedBox(height: 16),
 
-            ElevatedButton(
-              onPressed: () {
-                print('🎵 Set ringtone');
-                _remote.setRingtone('ringtone_1');
-              },
-              child: const Text('Set Ringtone ke "ringtone_1"'),
-            ),
-            const SizedBox(height: 8),
+              // Button 2: Stop Alarm
+              ElevatedButton.icon(
+                onPressed: () {
+                  print('🛑 Stop alarm');
+                  AlarmService.instance.stopAlarm(method: 'manual_button');
+                },
+                icon: const Icon(Icons.stop_circle, size: 28),
+                label: const Text(
+                  'Stop Alarm',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
 
-            ElevatedButton(
-              onPressed: () async {
-                print('🧪 Test local audio playback');
-                await _player.stop();
-                await _player.setReleaseMode(ReleaseMode.loop);
-                await _player.play(AssetSource('ringtones/ringtone_1.mp3'));
-              },
-              child: const Text('Tes play langsung'),
-            ),
-          ],
+              const SizedBox(height: 40),
+
+              const Divider(),
+
+              const SizedBox(height: 20),
+
+              // Button 3: Pilih Nada Dering
+              OutlinedButton.icon(
+                onPressed: _pickRingtone,
+                icon: const Icon(Icons.folder_open),
+                label: const Text(
+                  'Pilih Nada Dering',
+                  style: TextStyle(fontSize: 16),
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  side: const BorderSide(color: Colors.deepPurple, width: 2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Button 4: Set Nada Dering
+              OutlinedButton.icon(
+                onPressed: _setRingtone,
+                icon: const Icon(Icons.check_circle),
+                label: const Text(
+                  'Set Nada Dering',
+                  style: TextStyle(fontSize: 16),
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  side: const BorderSide(color: Colors.deepPurple, width: 2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
