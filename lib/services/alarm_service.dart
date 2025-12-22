@@ -1,25 +1,100 @@
 // ignore_for_file: avoid_print
 
 import 'dart:async';
+import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
-class AlarmService {
+class AlarmService with WidgetsBindingObserver {
   AlarmService._();
   static final AlarmService instance = AlarmService._();
 
   final AudioPlayer _player = AudioPlayer();
-  String? _filePath;
+  String? _customRingtone;
 
-  Timer? _autoStopTimer;
+  bool _isAlarmActive = false;
+  DateTime? _alarmStartTime;
 
-  // Plugin notifikasi (global)
+  static const platform = MethodChannel('com.childe.alarm/screen_unlock');
   static final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  // -----------------------------------------------------------
-  //  STEP 1: Inisialisasi notifikasi
-  // -----------------------------------------------------------
+  Future<void> init() async {
+    await initNotification();
+    _initAppLifecycleListener();
+    _initNativeScreenUnlockListener();
+    _configureAudioPlayer();
+    print("✅ AlarmService initialized successfully");
+  }
+
+  void _configureAudioPlayer() {
+    _player.setReleaseMode(ReleaseMode.loop);
+    _player.setVolume(1.0);
+    
+    _player.onPlayerStateChanged.listen((state) {
+      print("🎵 AudioPlayer state: $state");
+    });
+    
+    print("✅ AudioPlayer configured");
+  }
+
+  void _initAppLifecycleListener() {
+    WidgetsBinding.instance.addObserver(this);
+    print("✅ App lifecycle listener initialized");
+  }
+
+  void _initNativeScreenUnlockListener() {
+    platform.setMethodCallHandler((call) async {
+      print("📱 Native method call: ${call.method}");
+      
+      switch (call.method) {
+        case 'onScreenUnlocked':
+          print("🔓 Screen UNLOCKED detected from native!");
+          _handleScreenUnlock();
+          break;
+        case 'onScreenOn':
+          print("💡 Screen ON detected from native");
+          break;
+        default:
+          print("⚠️ Unknown method: ${call.method}");
+      }
+    });
+    
+    print("✅ Native screen unlock listener initialized");
+  }
+
+  void _handleScreenUnlock() {
+    if (!_isAlarmActive) return;
+    
+    final timeSinceStart = _alarmStartTime != null 
+        ? DateTime.now().difference(_alarmStartTime!).inSeconds 
+        : 0;
+    
+    if (timeSinceStart >= 2) {
+      print("🎯 HYBRID: Screen unlock → Auto-stopping alarm!");
+      stopAlarm(method: 'auto_screen_unlock');
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    print("📱 App lifecycle: $state");
+    
+    if (state == AppLifecycleState.resumed && _isAlarmActive) {
+      final timeSinceStart = _alarmStartTime != null 
+          ? DateTime.now().difference(_alarmStartTime!).inSeconds 
+          : 0;
+      
+      if (timeSinceStart >= 2) {
+        print("🟢 App resumed → Auto-stopping alarm");
+        stopAlarm(method: 'auto_user_interaction');
+      }
+    }
+  }
+
   Future<void> initNotification() async {
     const AndroidInitializationSettings androidInit =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -30,18 +105,17 @@ class AlarmService {
     await flutterLocalNotificationsPlugin.initialize(
       initSettings,
       onDidReceiveNotificationResponse: (response) {
-        print(
-            "DEBUG >>> Notif action ditekan, actionId = ${response.actionId}, payload = ${response.payload}");
-
-        // Apapun yang diklik di notif (body / tombol), kita anggap perintah STOP
-        AlarmService.instance.stopAlarm();
+        print("🔔 Notification action: ${response.actionId}");
+        if (response.actionId == 'stop_alarm' || response.payload == 'stop') {
+          stopAlarm(method: 'manual_notification');
+        }
       },
     );
 
     const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'remote_alarm_channel',
-      'Remote Alarm',
-      description: 'Channel untuk alarm remote',
+      'gentle_wakeup_alarm',
+      'Gentle Wake-Up Alarm',
+      description: 'Alarm notifications from your partner',
       importance: Importance.max,
       playSound: false,
       enableVibration: true,
@@ -53,33 +127,30 @@ class AlarmService {
             AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
 
-    print("DEBUG >>> Notifikasi berhasil diinisialisasi");
+    print("✅ Notification system initialized");
   }
 
-  // -----------------------------------------------------------
-  //  SET RINGTONE (dari file picker)
-  // -----------------------------------------------------------
-  void setFilePath(String path) {
-    _filePath = path;
-    print("DEBUG >>> ringtone path diset: $path");
+  void setCustomRingtone(String? path) {
+    _customRingtone = path;
+    print("🎵 Custom ringtone set: ${path ?? 'none'}");
   }
 
-  // -----------------------------------------------------------
-  //  Notifikasi Alarm + Tombol STOP
-  // -----------------------------------------------------------
-  Future<void> showAlarmNotification() async {
+  Future<void> _showAlarmNotification({required String partnerName}) async {
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
-      'remote_alarm_channel',
-      'Remote Alarm',
-      channelDescription: 'Notifikasi untuk alarm remote',
+      'gentle_wakeup_alarm',
+      'Gentle Wake-Up Alarm',
+      channelDescription: 'Alarm notifications from your partner',
       importance: Importance.max,
       priority: Priority.max,
       playSound: false,
+      fullScreenIntent: true,
+      category: AndroidNotificationCategory.alarm,
       actions: <AndroidNotificationAction>[
         AndroidNotificationAction(
-          'stop_alarm', // actionId
-          'STOP ALARM', // label tombol
+          'stop_alarm',
+          '🛑 STOP ALARM',
+          showsUserInterface: true,
         ),
       ],
     );
@@ -88,56 +159,105 @@ class AlarmService {
         NotificationDetails(android: androidDetails);
 
     await flutterLocalNotificationsPlugin.show(
-      1001,
-      'ERINN BANGUNN 🚨',
-      'Alarm lagi bunyi, pencet STOP ALARM.',
+      9999,
+      '⏰ Wake Up! - $partnerName',
+      'Unlock HP atau TAP tombol STOP.',
       notifDetails,
+      payload: 'stop',
     );
   }
-  // -----------------------------------------------------------
-  //  PLAY ALARM + AUTO STOP (10 DETIK)
-  // -----------------------------------------------------------
-  Future<void> playAlarm() async {
-    print("DEBUG >>> playAlarm DIPANGGIL (file: $_filePath)");
+
+  Future<void> playAlarm({String partnerName = 'Partner'}) async {
+    print("🔔 playAlarm() called");
+    
+    if (_isAlarmActive) {
+      print("⚠️ Alarm already active, ignoring");
+      return;
+    }
+
+    if (_customRingtone == null || _customRingtone!.isEmpty) {
+      print("❌ No custom ringtone set!");
+      return;
+    }
+
+    print("🚨 ========== ALARM STARTED ==========");
+    _isAlarmActive = true;
+    _alarmStartTime = DateTime.now();
 
     try {
+      await WakelockPlus.enable();
+      print("🔒 Wakelock enabled");
+
       await _player.stop();
-      // Mainkan suara
-      if (_filePath != null) {
-        await _player.play(DeviceFileSource(_filePath!));
+      
+      // VALIDATE FILE
+      print("📂 Validating: $_customRingtone");
+      final file = File(_customRingtone!);
+      
+      if (!await file.exists()) {
+        print("❌ FILE NOT FOUND!");
+        throw Exception("Ringtone file not found! Re-select audio.");
+      }
+      
+      final size = await file.length();
+      print("✅ File OK: ${(size / 1024 / 1024).toStringAsFixed(2)} MB");
+      
+      // PLAY
+      print("🎵 Starting playback...");
+      await _player.play(DeviceFileSource(_customRingtone!));
+      
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      final state = _player.state;
+      print("🎵 Player state: $state");
+      
+      if (state != PlayerState.playing) {
+        print("⚠️ Audio NOT playing! State: $state");
       } else {
-        await _player.play(AssetSource('sounds/alarm.mp3'));
+        print("✅✅✅ AUDIO IS PLAYING!");
       }
 
-      // Munculkan notifikasi alarm
-      await showAlarmNotification();
+      await _showAlarmNotification(partnerName: partnerName);
+      print("🔔 Notification shown");
 
-      // Reset timer sebelumnya jika ada
-      _autoStopTimer?.cancel();
-
-      // Mulai timer 10 detik
-      _autoStopTimer = Timer(const Duration(seconds: 10), () {
-        print("DEBUG >>> AUTO STOP (10 detik)");
-        stopAlarm();
-      });
-    } catch (e) {
-      print("Gagal play file: $e");
+    } catch (e, stack) {
+      print("❌ ERROR: $e");
+      print("📍 Stack: $stack");
+      _isAlarmActive = false;
+      _alarmStartTime = null;
+      await WakelockPlus.disable();
+      rethrow;
     }
   }
 
-  // -----------------------------------------------------------
-  //  STOP ALARM (manual / notif / auto)
-  // -----------------------------------------------------------
-  Future<void> stopAlarm() async {
-    print("DEBUG >>> stopAlarm dipanggil");
+  Future<void> stopAlarm({String method = 'unknown'}) async {
+    if (!_isAlarmActive) {
+      print("⚠️ Alarm not active");
+      return;
+    }
 
-    // Stop suara
-    await _player.stop();
+    print("🛑 ========== ALARM STOPPED ==========");
+    print("   Method: $method");
+    
+    _isAlarmActive = false;
+    _alarmStartTime = null;
+    
+    print("✅ State reset!");
 
-    // Stop timer kalau masih aktif
-    _autoStopTimer?.cancel();
+    try {
+      await _player.stop();
+      await WakelockPlus.disable();
+      await flutterLocalNotificationsPlugin.cancel(9999);
+      print("✅ Cleanup complete");
+    } catch (e) {
+      print("❌ Error: $e");
+    }
+  }
 
-    // Hapus notifikasi alarm
-    await flutterLocalNotificationsPlugin.cancel(1001);
+  Future<void> dispose() async {
+    WidgetsBinding.instance.removeObserver(this);
+    await _player.dispose();
+    await WakelockPlus.disable();
+    print("🧹 Disposed");
   }
 }
