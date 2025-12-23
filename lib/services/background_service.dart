@@ -25,8 +25,11 @@ class BackgroundAlarmService {
     await service.configure(
       androidConfiguration: AndroidConfiguration(
         onStart: backgroundServiceOnStart,
-        autoStart: false,
+        autoStart: true,
         isForegroundMode: true,
+
+        /// Pastikan service auto start lagi setelah reboot/kill
+        autoStartOnBoot: true,
 
         /// ✅ FIX: pakai channel yang benar-benar sudah dibuat di app
         /// (channel lama 'alarm_service_channel' bikin crash: Bad notification for startForeground)
@@ -51,6 +54,15 @@ class BackgroundAlarmService {
     final service = FlutterBackgroundService();
     await service.startService();
     print('🚀 Background service started');
+  }
+
+  /// Pastikan service tetap hidup (akan start ulang jika mati)
+  static Future<void> ensureRunning() async {
+    final isRunning = await isServiceRunning();
+    if (!isRunning) {
+      print('♻️ Background service not running - restarting...');
+      await startService();
+    }
   }
 
   /// Stop the service

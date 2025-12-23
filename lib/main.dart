@@ -64,6 +64,9 @@ Future<void> main() async {
   await BackgroundAlarmService.startService();
   print('🚀 Background service started');
 
+  // ✅ Pastikan service tetap hidup walau app di-kill / reboot
+  await BackgroundAlarmService.ensureRunning();
+
   runApp(const MyApp());
 }
 
